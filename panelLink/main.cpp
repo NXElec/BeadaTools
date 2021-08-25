@@ -26,6 +26,7 @@ typedef struct _PANELLINK_STREAM_TAG {
 #pragma pack(pop)//恢复对齐状态
 
 #define MIN_Buffer_Size 512
+#define Buffer_Number 25
 
 BOOL GetUSBDeviceSpeed(WINUSB_INTERFACE_HANDLE hDeviceHandle, UCHAR* pDeviceSpeed)
 {
@@ -91,7 +92,7 @@ BOOL QueryDeviceEndpoints(WINUSB_INTERFACE_HANDLE hDeviceHandle, PIPE_ID* pipeid
 
 	if (bResult)
 	{
-		for (int index = 0; index < InterfaceDescriptor.bNumEndpoints; index++)
+		for (int index = 0; index < 2; index++)
 		{
 			bResult = WinUsb_QueryPipe(hDeviceHandle, 0, index, &Pipe);
 
@@ -225,9 +226,10 @@ Routine description:
 	PIPE_ID               pipeID;
 	UCHAR                 speed;
 	PANELLINK_STREAM_TAG * pTemp;
-	int loop = 25;
+	int loop = 1;
 	UCHAR Fmt[256];
 	int isize;
+	DWORD cbSent;
 
 	//
 	// Find a device connected to the system that has WinUSB installed using our
@@ -285,10 +287,11 @@ Routine description:
 		CloseDevice(&deviceData);
 		return 0;
 	}
-	else if (Argc == 3) {
-		isize = WideCharToMultiByte(CP_ACP, 0, Argv[2], -1, NULL, 0, NULL, NULL);
+
+	if (Argc == 4) {
+		isize = WideCharToMultiByte(CP_ACP, 0, Argv[3], -1, NULL, 0, NULL, NULL);
 		if (isize <= 256) {
-			WideCharToMultiByte(CP_ACP, 0, Argv[2], -1, (LPSTR)Fmt, isize, NULL, NULL);
+			WideCharToMultiByte(CP_ACP, 0, Argv[3], -1, (LPSTR)Fmt, isize, NULL, NULL);
 
 			//	pFmt = (UCHAR *)Argv[2];
 			printf("format string %s %d\n",
@@ -296,8 +299,8 @@ Routine description:
 		}
 	}
 
-
-	//		loop = _wtoi(Argv[2]);
+	if (Argc >= 3 )
+		loop = _wtoi(Argv[2]);
 
 	//	while (1) {
 	HANDLE hFile = CreateFile(Argv[1],
@@ -322,22 +325,23 @@ Routine description:
 	// Should we implement a file mapping here to improve I/O performance?? 
 	//
 	DWORD dwFileSize = GetFileSize(hFile, NULL);
-	UCHAR* szBuffer = (UCHAR*)LocalAlloc(LPTR, MIN_Buffer_Size*loop);
+	UCHAR* szBuffer = (UCHAR*)LocalAlloc(LPTR, MIN_Buffer_Size*Buffer_Number);
 
+	pTemp = (PANELLINK_STREAM_TAG*)szBuffer;
+	while (loop>0)
 	{
 		SetFilePointer(hFile,
 			0,
 			NULL,
 			FILE_BEGIN);
 
-		pTemp = (PANELLINK_STREAM_TAG*)szBuffer;
 		pTemp->type = TYPE_START;
 		pTemp->version = 1;
 		memcpy(pTemp->protocol_name, protocol_str, strlen(protocol_str));
 		memset(pTemp->fmtstr, 0, 256);
 		memcpy(pTemp->fmtstr, Fmt, strlen((CONST char*)Fmt));
 		pTemp->checksum16 = checksum16((unsigned short *)szBuffer, (sizeof(PANELLINK_STREAM_TAG) - 2) / 2);
-		DWORD cbSent = 0;
+		cbSent = 0;
 
 		bResult = WinUsb_WritePipe(deviceData.WinusbHandle, pipeID.PipeOutId, (UCHAR *)szBuffer, sizeof(PANELLINK_STREAM_TAG), &cbSent, 0);
 		if (!bResult)
@@ -352,8 +356,10 @@ Routine description:
 			wprintf(L"WinUsb_WritePipe success - %d bytes header.\n", cbSent);
 		}
 
-		DWORD sections = dwFileSize / (MIN_Buffer_Size * loop);
-		DWORD reminders = dwFileSize % (MIN_Buffer_Size * loop);
+//		Sleep(1000);
+
+		DWORD sections = dwFileSize / (MIN_Buffer_Size * Buffer_Number);
+		DWORD reminders = dwFileSize % (MIN_Buffer_Size * Buffer_Number);
 		if (reminders)
 			sections += 1;
 
@@ -361,7 +367,7 @@ Routine description:
 		for (int i = 0; i < sections; i++) {
 			ReadFile(hFile,
 				szBuffer,
-				MIN_Buffer_Size * loop,//读取文件中多少内容
+				MIN_Buffer_Size * Buffer_Number,//读取文件中多少内容
 				&lpNumber,
 				NULL
 			);
@@ -377,9 +383,12 @@ Routine description:
 			}
 
 
-			//	printf("Wrote to pipe %d: \nActual data transferred: %d.\n", pipeID.PipeOutId, cbSent);
+			printf("Wrote to pipe %d: \nActual data transferred: %d.\n", pipeID.PipeOutId, cbSent);
 		}
 
+		Sleep(20);
+
+#if 0
 		pTemp->type = TYPE_END;
 		pTemp->version = 1;
 		memcpy(pTemp->protocol_name, protocol_str, strlen(protocol_str));
@@ -400,31 +409,32 @@ Routine description:
 		else {
 			wprintf(L"WinUsb_WritePipe success - %d bytes header.\n", cbSent);
 		}
+#endif
 
 		wprintf(L"File content dump done.\n");
-
-		pTemp->type = TYPE_RESET;
-		pTemp->version = 1;
-		memcpy(pTemp->protocol_name, protocol_str, strlen(protocol_str));
-		memset(pTemp->fmtstr, 0, 256);
-		pTemp->checksum16 = checksum16((unsigned short *)szBuffer, (sizeof(PANELLINK_STREAM_TAG) - 2) / 2);
-		cbSent = 0;
-
-		bResult = WinUsb_WritePipe(deviceData.WinusbHandle, pipeID.PipeOutId, (UCHAR *)szBuffer, sizeof(PANELLINK_STREAM_TAG), &cbSent, 0);
-		if (!bResult)
-		{
-			wprintf(L"WinUsb_WritePipe failure - reset.\n");
-			LocalFree(szBuffer);
-			CloseHandle(hFile);
-			CloseDevice(&deviceData);
-			return 0;
-		}
-		else {
-			wprintf(L"WinUsb_WritePipe success - %d bytes reset.\n", cbSent);
-		}
+		Sleep(80);
+		loop--;
 	}
 
- wprintf(L"File content dump done.\n");
+	pTemp->type = TYPE_RESET;
+	pTemp->version = 1;
+	memcpy(pTemp->protocol_name, protocol_str, strlen(protocol_str));
+	memset(pTemp->fmtstr, 0, 256);
+	pTemp->checksum16 = checksum16((unsigned short *)szBuffer, (sizeof(PANELLINK_STREAM_TAG) - 2) / 2);
+	cbSent = 0;
+
+	bResult = WinUsb_WritePipe(deviceData.WinusbHandle, pipeID.PipeOutId, (UCHAR *)szBuffer, sizeof(PANELLINK_STREAM_TAG), &cbSent, 0);
+	if (!bResult)
+	{
+		wprintf(L"WinUsb_WritePipe failure - reset.\n");
+		LocalFree(szBuffer);
+		CloseHandle(hFile);
+		CloseDevice(&deviceData);
+		return 0;
+	}
+	else {
+		wprintf(L"WinUsb_WritePipe success - %d bytes reset.\n", cbSent);
+	}
  
  LocalFree(szBuffer);
 		CloseHandle(hFile);
