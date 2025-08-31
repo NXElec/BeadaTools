@@ -1,6 +1,6 @@
 # panelLink
-VS2017 Demo Project for NXElec Panel-Link V1.0 Protocol
+VS2017 Demo Project for NXElec Status-Link V1.0 Protocol
 
-<img src="https://github.com/NXElec/panelLink/blob/master/bpwinusb640.png" width="600"/><br>
+<img src="https://github.com/NXElec/BeadaTools/blob/v1.1/bpwinusb640.png" width="600"/><br>
 
-[Panel-Link Official Page](http://www.nxelec.com/products/hmi/beadapanel-media-display)
+[Status-Link Official Page](http://www.nxelec.com/products/beadapanel-media-display)
